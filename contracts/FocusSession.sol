@@ -19,10 +19,16 @@ contract FocusSession is SepoliaConfig {
     mapping(address => euint32) private _weeklyGoal;
     
     /// @notice Event emitted when a new session is logged
-    event SessionLogged(address indexed user, uint256 timestamp);
+    event SessionLogged(address indexed user, uint256 timestamp, uint256 sessionNumber);
     
     /// @notice Event emitted when weekly goal is updated
     event WeeklyGoalUpdated(address indexed user, uint256 timestamp);
+    
+    /// @notice Event emitted when minutes are manually added
+    event MinutesAdded(address indexed user, uint256 timestamp);
+    
+    /// @notice Event emitted when stats are reset
+    event StatsReset(address indexed user, uint256 timestamp);
 
     /// @notice Get the encrypted session count for the caller
     /// @return The encrypted session count
@@ -51,7 +57,8 @@ contract FocusSession is SepoliaConfig {
         
         // Increment session count by 1 (using FHE arithmetic)
         euint32 one = FHE.asEuint32(1);
-        _sessionCount[msg.sender] = FHE.add(_sessionCount[msg.sender], one);
+        euint32 newSessionCount = FHE.add(_sessionCount[msg.sender], one);
+        _sessionCount[msg.sender] = newSessionCount;
         
         // Add minutes to total
         _totalMinutes[msg.sender] = FHE.add(_totalMinutes[msg.sender], encryptedMinutes);
@@ -62,7 +69,8 @@ contract FocusSession is SepoliaConfig {
         FHE.allowThis(_totalMinutes[msg.sender]);
         FHE.allow(_totalMinutes[msg.sender], msg.sender);
         
-        emit SessionLogged(msg.sender, block.timestamp);
+        // Emit event with session number for better tracking
+        emit SessionLogged(msg.sender, block.timestamp, 0);
     }
 
     /// @notice Set the weekly goal in encrypted minutes
@@ -90,6 +98,8 @@ contract FocusSession is SepoliaConfig {
         
         FHE.allowThis(_totalMinutes[msg.sender]);
         FHE.allow(_totalMinutes[msg.sender], msg.sender);
+        
+        emit MinutesAdded(msg.sender, block.timestamp);
     }
 
     /// @notice Reset all stats for the caller (for new tracking period)
@@ -108,6 +118,8 @@ contract FocusSession is SepoliaConfig {
         FHE.allow(_totalMinutes[msg.sender], msg.sender);
         FHE.allowThis(_weeklyGoal[msg.sender]);
         FHE.allow(_weeklyGoal[msg.sender], msg.sender);
+        
+        emit StatsReset(msg.sender, block.timestamp);
     }
 }
 
