@@ -290,5 +290,154 @@ describe("FocusSession", function () {
     );
     expect(clearGoal).to.eq(0);
   });
+
+  it("can log session with 1 minute (minimum value)", async function () {
+    const minMinutes = 1;
+    const encryptedMinutes = await fhevm
+      .createEncryptedInput(focusSessionContractAddress, signers.alice.address)
+      .add32(minMinutes)
+      .encrypt();
+
+    const tx = await focusSessionContract
+      .connect(signers.alice)
+      .logSession(encryptedMinutes.handles[0], encryptedMinutes.inputProof);
+    await tx.wait();
+
+    const encryptedTotal = await focusSessionContract.connect(signers.alice).getTotalMinutes();
+    const clearTotal = await fhevm.userDecryptEuint(
+      FhevmType.euint32,
+      encryptedTotal,
+      focusSessionContractAddress,
+      signers.alice,
+    );
+    expect(clearTotal).to.eq(minMinutes);
+  });
+
+  it("can log session with large value (stress test)", async function () {
+    const largeMinutes = 1440; // 24 hours
+    const encryptedMinutes = await fhevm
+      .createEncryptedInput(focusSessionContractAddress, signers.alice.address)
+      .add32(largeMinutes)
+      .encrypt();
+
+    const tx = await focusSessionContract
+      .connect(signers.alice)
+      .logSession(encryptedMinutes.handles[0], encryptedMinutes.inputProof);
+    await tx.wait();
+
+    const encryptedTotal = await focusSessionContract.connect(signers.alice).getTotalMinutes();
+    const clearTotal = await fhevm.userDecryptEuint(
+      FhevmType.euint32,
+      encryptedTotal,
+      focusSessionContractAddress,
+      signers.alice,
+    );
+    expect(clearTotal).to.eq(largeMinutes);
+  });
+
+  it("can accumulate many sessions without overflow", async function () {
+    // Log 10 sessions of 60 minutes each
+    const sessionCount = 10;
+    const minutesPerSession = 60;
+
+    for (let i = 0; i < sessionCount; i++) {
+      const encrypted = await fhevm
+        .createEncryptedInput(focusSessionContractAddress, signers.alice.address)
+        .add32(minutesPerSession)
+        .encrypt();
+
+      const tx = await focusSessionContract
+        .connect(signers.alice)
+        .logSession(encrypted.handles[0], encrypted.inputProof);
+      await tx.wait();
+    }
+
+    // Verify session count
+    const encryptedCount = await focusSessionContract.connect(signers.alice).getSessionCount();
+    const clearCount = await fhevm.userDecryptEuint(
+      FhevmType.euint32,
+      encryptedCount,
+      focusSessionContractAddress,
+      signers.alice,
+    );
+    expect(clearCount).to.eq(sessionCount);
+
+    // Verify total minutes
+    const encryptedTotal = await focusSessionContract.connect(signers.alice).getTotalMinutes();
+    const clearTotal = await fhevm.userDecryptEuint(
+      FhevmType.euint32,
+      encryptedTotal,
+      focusSessionContractAddress,
+      signers.alice,
+    );
+    expect(clearTotal).to.eq(sessionCount * minutesPerSession);
+  });
+
+  it("weekly goal can be updated multiple times", async function () {
+    // Set initial goal
+    const firstGoal = 300;
+    let encrypted = await fhevm
+      .createEncryptedInput(focusSessionContractAddress, signers.alice.address)
+      .add32(firstGoal)
+      .encrypt();
+
+    let tx = await focusSessionContract
+      .connect(signers.alice)
+      .setWeeklyGoal(encrypted.handles[0], encrypted.inputProof);
+    await tx.wait();
+
+    // Update to new goal
+    const secondGoal = 500;
+    encrypted = await fhevm
+      .createEncryptedInput(focusSessionContractAddress, signers.alice.address)
+      .add32(secondGoal)
+      .encrypt();
+
+    tx = await focusSessionContract
+      .connect(signers.alice)
+      .setWeeklyGoal(encrypted.handles[0], encrypted.inputProof);
+    await tx.wait();
+
+    // Verify final goal is the second one
+    const encryptedGoal = await focusSessionContract.connect(signers.alice).getWeeklyGoal();
+    const clearGoal = await fhevm.userDecryptEuint(
+      FhevmType.euint32,
+      encryptedGoal,
+      focusSessionContractAddress,
+      signers.alice,
+    );
+    expect(clearGoal).to.eq(secondGoal);
+  });
+
+  it("reset can be called multiple times safely", async function () {
+    // Log session
+    const encrypted = await fhevm
+      .createEncryptedInput(focusSessionContractAddress, signers.alice.address)
+      .add32(25)
+      .encrypt();
+
+    let tx = await focusSessionContract
+      .connect(signers.alice)
+      .logSession(encrypted.handles[0], encrypted.inputProof);
+    await tx.wait();
+
+    // Reset first time
+    tx = await focusSessionContract.connect(signers.alice).resetStats();
+    await tx.wait();
+
+    // Reset again (should work even with zero values)
+    tx = await focusSessionContract.connect(signers.alice).resetStats();
+    await tx.wait();
+
+    // Verify still zero
+    const encryptedCount = await focusSessionContract.connect(signers.alice).getSessionCount();
+    const clearCount = await fhevm.userDecryptEuint(
+      FhevmType.euint32,
+      encryptedCount,
+      focusSessionContractAddress,
+      signers.alice,
+    );
+    expect(clearCount).to.eq(0);
+  });
 });
 
