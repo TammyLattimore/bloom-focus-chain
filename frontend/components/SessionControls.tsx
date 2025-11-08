@@ -10,13 +10,24 @@ interface SessionControlsProps {
   onSessionComplete: (minutes: number) => Promise<void>;
   isLogging: boolean;
   canLog: boolean;
+  defaultDuration?: number; // Duration in minutes, defaults to 25
 }
 
-const SessionControls = ({ onStateChange, onSessionComplete, isLogging, canLog }: SessionControlsProps) => {
+const SessionControls = ({ 
+  onStateChange, 
+  onSessionComplete, 
+  isLogging, 
+  canLog,
+  defaultDuration = 25 
+}: SessionControlsProps) => {
   const [isActive, setIsActive] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [seconds, setSeconds] = useState(0);
-  const sessionDuration = 25 * 60; // 25 minutes in seconds
+  const [customDuration, setCustomDuration] = useState<number>(defaultDuration);
+  const [showDurationInput, setShowDurationInput] = useState(false);
+  
+  // Calculate session duration in seconds
+  const sessionDuration = customDuration * 60;
   
   // Use refs to avoid stale closures and rendering issues
   const onStateChangeRef = useRef(onStateChange);
@@ -144,11 +155,51 @@ const SessionControls = ({ onStateChange, onSessionComplete, isLogging, canLog }
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
+  const handleDurationChange = (newDuration: number) => {
+    if (newDuration > 0 && newDuration <= 240) { // Max 4 hours
+      setCustomDuration(newDuration);
+      setShowDurationInput(false);
+      toast.success(`Session duration set to ${newDuration} minutes`);
+    } else {
+      toast.error("Duration must be between 1 and 240 minutes");
+    }
+  };
+
   return (
     <div className="flex flex-col items-center gap-6 animate-fade-in">
       <div className="text-5xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent tabular-nums">
         {formatTime(seconds)}
       </div>
+      
+      {/* Duration selector */}
+      {!isActive && showDurationInput && (
+        <div className="flex items-center gap-2 p-3 bg-card rounded-lg border border-border">
+          <label className="text-sm text-muted-foreground">Duration:</label>
+          <input
+            type="number"
+            value={customDuration}
+            onChange={(e) => {
+              const val = parseInt(e.target.value);
+              if (!isNaN(val)) {
+                handleDurationChange(val);
+              }
+            }}
+            className="w-20 px-2 py-1 rounded border border-border bg-background text-sm"
+            min="1"
+            max="240"
+          />
+          <span className="text-sm text-muted-foreground">min</span>
+        </div>
+      )}
+      
+      {!isActive && !showDurationInput && seconds === 0 && (
+        <button
+          onClick={() => setShowDurationInput(true)}
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors underline"
+        >
+          Session: {customDuration} minutes (click to change)
+        </button>
+      )}
       
       <div className="flex gap-3">
         {!isActive ? (
