@@ -45,11 +45,15 @@ const SessionControls = ({ onStateChange, onSessionComplete, isLogging, canLog }
   const handleStop = useCallback(() => {
     setIsActive(false);
     setIsPaused(false);
-    setSeconds(prev => prev); // Keep current seconds for saving
+    // Keep current seconds for saving - don't reset until actually saved
+    toast.info("Session stopped", {
+      description: "Click 'Save Session' to store your progress on-chain.",
+    });
   }, []);
 
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
+    let completionTimeout: NodeJS.Timeout | null = null;
 
     if (isActive && !isPaused) {
       interval = setInterval(() => {
@@ -58,7 +62,7 @@ const SessionControls = ({ onStateChange, onSessionComplete, isLogging, canLog }
           
           if (newSeconds >= sessionDuration) {
             // Use setTimeout to avoid state update during render
-            setTimeout(() => {
+            completionTimeout = setTimeout(() => {
               setIsActive(false);
               setIsPaused(false);
               toast.success("Focus session completed!", {
@@ -73,8 +77,16 @@ const SessionControls = ({ onStateChange, onSessionComplete, isLogging, canLog }
       }, 1000);
     }
 
+    // Cleanup function to prevent memory leaks
     return () => {
-      if (interval) clearInterval(interval);
+      if (interval) {
+        clearInterval(interval);
+        interval = null;
+      }
+      if (completionTimeout) {
+        clearTimeout(completionTimeout);
+        completionTimeout = null;
+      }
     };
   }, [isActive, isPaused, sessionDuration]);
 
@@ -93,7 +105,16 @@ const SessionControls = ({ onStateChange, onSessionComplete, isLogging, canLog }
 
   const handleSaveSession = async () => {
     if (seconds === 0) {
-      toast.error("No session to save");
+      toast.error("No session to save", {
+        description: "Start a focus session first.",
+      });
+      return;
+    }
+    
+    if (!canLog) {
+      toast.error("Cannot save session", {
+        description: "Please connect your wallet first.",
+      });
       return;
     }
     
@@ -101,14 +122,19 @@ const SessionControls = ({ onStateChange, onSessionComplete, isLogging, canLog }
     
     try {
       await onSessionComplete(minutes);
+      // Only reset seconds after successful save
       setSeconds(0);
+      setIsActive(false);
+      setIsPaused(false);
       toast.success("Session saved on-chain!", {
         description: `${minutes} minutes encrypted and stored securely.`,
       });
     } catch (error) {
+      console.error("Failed to save session:", error);
       toast.error("Failed to save session", {
-        description: error instanceof Error ? error.message : "Unknown error",
+        description: error instanceof Error ? error.message : "Unknown error occurred",
       });
+      // Don't reset state on error - user can try again
     }
   };
 
