@@ -87,16 +87,19 @@ export default function Home() {
     }
   };
 
-  // Calculate display values
-  const sessionCount = focusSession.isDecrypted 
-    ? Number(focusSession.sessionCount || 0) 
+  // Calculate display values with proper type safety
+  const sessionCount = focusSession.isDecrypted && focusSession.sessionCount !== undefined
+    ? Number(focusSession.sessionCount) 
     : 0;
-  const totalMinutes = focusSession.isDecrypted 
-    ? Number(focusSession.totalMinutes || 0) 
+  const totalMinutes = focusSession.isDecrypted && focusSession.totalMinutes !== undefined
+    ? Number(focusSession.totalMinutes) 
     : 0;
-  const weeklyGoal = focusSession.isDecrypted 
-    ? Number(focusSession.weeklyGoal || 600) 
+  const weeklyGoal = focusSession.isDecrypted && focusSession.weeklyGoal !== undefined
+    ? Number(focusSession.weeklyGoal) 
     : 600;
+  
+  // Calculate progress percentage
+  const goalProgress = weeklyGoal > 0 ? Math.min((totalMinutes / weeklyGoal) * 100, 100) : 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
@@ -234,7 +237,9 @@ export default function Home() {
                 <p className="text-4xl font-bold text-foreground mb-1">
                   {focusSession.isDecrypted ? sessionCount : "***"}
                 </p>
-                <p className="text-xs text-accent">Encrypted on-chain</p>
+                <p className="text-xs text-accent">
+                  {focusSession.isDecrypted ? "Decrypted from chain" : "Encrypted on-chain"}
+                </p>
               </div>
               
               <div className="bg-card rounded-2xl p-6 border border-border shadow-lg hover:shadow-xl transition-shadow">
@@ -242,7 +247,20 @@ export default function Home() {
                 <p className="text-4xl font-bold text-foreground mb-1">
                   {focusSession.isDecrypted ? totalMinutes : "***"}
                 </p>
-                <p className="text-xs text-accent">Private until decrypted</p>
+                <p className="text-xs text-accent">
+                  {focusSession.isDecrypted 
+                    ? `${goalProgress.toFixed(1)}% of weekly goal` 
+                    : "Private until decrypted"}
+                </p>
+                {/* Progress bar */}
+                {focusSession.isDecrypted && (
+                  <div className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-primary to-accent transition-all duration-500"
+                      style={{ width: `${goalProgress}%` }}
+                    />
+                  </div>
+                )}
               </div>
               
               <div className="bg-card rounded-2xl p-6 border border-border shadow-lg hover:shadow-xl transition-shadow">
@@ -252,7 +270,11 @@ export default function Home() {
                     ? Math.round(totalMinutes / sessionCount) 
                     : "***"}
                 </p>
-                <p className="text-xs text-muted-foreground">minutes</p>
+                <p className="text-xs text-muted-foreground">
+                  {focusSession.isDecrypted && sessionCount > 0 
+                    ? `minutes per session`
+                    : "minutes"}
+                </p>
               </div>
             </div>
 
