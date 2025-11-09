@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useMemo } from "react";
 import Logo from "@/components/Logo";
 import { ConnectWalletButton } from "@/components/ConnectWalletButton";
 import TimerRing from "@/components/TimerRing";
@@ -58,21 +58,22 @@ export default function Home() {
     sameSigner,
   });
 
-  const handleSessionStateChange = (active: boolean, progressValue: number) => {
+  // Memoize callbacks to prevent unnecessary re-renders
+  const handleSessionStateChange = useCallback((active: boolean, progressValue: number) => {
     setIsSessionActive(active);
     setProgress(progressValue);
-  };
+  }, []);
 
-  const handleSessionComplete = async (minutes: number) => {
+  const handleSessionComplete = useCallback(async (minutes: number) => {
     await focusSession.logSession(minutes);
-  };
+  }, [focusSession]);
 
-  const handleDecrypt = () => {
+  const handleDecrypt = useCallback(() => {
     focusSession.decryptStats();
     toast.info("Requesting wallet signature to decrypt data...");
-  };
+  }, [focusSession]);
 
-  const handleSetGoal = async () => {
+  const handleSetGoal = useCallback(async () => {
     const goal = parseInt(goalInput);
     if (isNaN(goal) || goal <= 0) {
       toast.error("Please enter a valid goal");
@@ -85,21 +86,31 @@ export default function Home() {
     } catch {
       toast.error("Failed to set goal");
     }
-  };
+  }, [goalInput, focusSession]);
 
-  // Calculate display values with proper type safety
-  const sessionCount = focusSession.isDecrypted && focusSession.sessionCount !== undefined
-    ? Number(focusSession.sessionCount) 
-    : 0;
-  const totalMinutes = focusSession.isDecrypted && focusSession.totalMinutes !== undefined
-    ? Number(focusSession.totalMinutes) 
-    : 0;
-  const weeklyGoal = focusSession.isDecrypted && focusSession.weeklyGoal !== undefined
-    ? Number(focusSession.weeklyGoal) 
-    : 600;
+  // Memoize calculated display values to prevent unnecessary recalculations
+  const sessionCount = useMemo(() => {
+    return focusSession.isDecrypted && focusSession.sessionCount !== undefined
+      ? Number(focusSession.sessionCount) 
+      : 0;
+  }, [focusSession.isDecrypted, focusSession.sessionCount]);
+
+  const totalMinutes = useMemo(() => {
+    return focusSession.isDecrypted && focusSession.totalMinutes !== undefined
+      ? Number(focusSession.totalMinutes) 
+      : 0;
+  }, [focusSession.isDecrypted, focusSession.totalMinutes]);
+
+  const weeklyGoal = useMemo(() => {
+    return focusSession.isDecrypted && focusSession.weeklyGoal !== undefined
+      ? Number(focusSession.weeklyGoal) 
+      : 600;
+  }, [focusSession.isDecrypted, focusSession.weeklyGoal]);
   
-  // Calculate progress percentage
-  const goalProgress = weeklyGoal > 0 ? Math.min((totalMinutes / weeklyGoal) * 100, 100) : 0;
+  // Calculate progress percentage (memoized)
+  const goalProgress = useMemo(() => {
+    return weeklyGoal > 0 ? Math.min((totalMinutes / weeklyGoal) * 100, 100) : 0;
+  }, [weeklyGoal, totalMinutes]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">

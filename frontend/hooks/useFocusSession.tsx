@@ -138,21 +138,22 @@ export const useFocusSession = (parameters: {
   }, [ethersSigner]);
 
   // Check if there's any data (non-zero handle)
+  // Memoize to prevent unnecessary re-calculations
   const hasData = useMemo(() => {
     return sessionCountHandle !== undefined && sessionCountHandle !== ethers.ZeroHash;
   }, [sessionCountHandle]);
 
   // Check if data is decrypted - handles must match their clear values
+  // This is a critical check used in multiple places, so memoize it
   const isDecrypted = useMemo(() => {
     // If no session count handle, not decrypted yet
     if (!sessionCountHandle) return false;
     // If session count is zero hash, treat as decrypted with zeros
     if (sessionCountHandle === ethers.ZeroHash) return true;
     // Otherwise check if handles match their clear values
-    return (
-      sessionCountHandle === clearSessionCount?.handle &&
-      (!totalMinutesHandle || totalMinutesHandle === clearTotalMinutes?.handle)
-    );
+    const sessionMatches = sessionCountHandle === clearSessionCount?.handle;
+    const minutesMatch = !totalMinutesHandle || totalMinutesHandle === clearTotalMinutes?.handle;
+    return sessionMatches && minutesMatch;
   }, [sessionCountHandle, totalMinutesHandle, clearSessionCount, clearTotalMinutes]);
 
   // FocusSession Contract Info
@@ -250,11 +251,13 @@ export const useFocusSession = (parameters: {
   }, [ethersSigner, sameChain]);
 
   // Auto refresh when signer is available
+  // Only run when signer or address actually changes, not when refreshHandles changes
   useEffect(() => {
     if (ethersSigner && focusSession.address) {
       refreshHandles();
     }
-  }, [ethersSigner, focusSession.address, refreshHandles]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ethersSigner, focusSession.address]);
 
   // Decrypt all handles
   const canDecrypt = useMemo(() => {
