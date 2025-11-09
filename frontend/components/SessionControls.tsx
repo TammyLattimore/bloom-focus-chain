@@ -5,12 +5,32 @@ import { Button } from "@/components/ui/button";
 import { Play, Pause, Square, Save } from "lucide-react";
 import { toast } from "sonner";
 
+/**
+ * Constants for session duration configuration
+ */
+const SESSION_DURATION = {
+  MIN_MINUTES: 1,
+  MAX_MINUTES: 240,
+  DEFAULT_MINUTES: 25,
+  SECONDS_PER_MINUTE: 60,
+} as const;
+
+const TIMER_INTERVAL_MS = 1000; // 1 second
+
+/**
+ * Props for SessionControls component
+ */
 interface SessionControlsProps {
+  /** Callback when session state changes (active/inactive) */
   onStateChange: (isActive: boolean, progress: number) => void;
+  /** Callback to complete and save session on-chain */
   onSessionComplete: (minutes: number) => Promise<void>;
+  /** Whether a session is currently being logged to chain */
   isLogging: boolean;
+  /** Whether user can log sessions (wallet connected) */
   canLog: boolean;
-  defaultDuration?: number; // Duration in minutes, defaults to 25
+  /** Default session duration in minutes (1-240) */
+  defaultDuration?: number;
 }
 
 const SessionControls = ({ 
@@ -18,16 +38,16 @@ const SessionControls = ({
   onSessionComplete, 
   isLogging, 
   canLog,
-  defaultDuration = 25 
+  defaultDuration = SESSION_DURATION.DEFAULT_MINUTES 
 }: SessionControlsProps) => {
-  const [isActive, setIsActive] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  const [seconds, setSeconds] = useState(0);
+  const [isActive, setIsActive] = useState<boolean>(false);
+  const [isPaused, setIsPaused] = useState<boolean>(false);
+  const [seconds, setSeconds] = useState<number>(0);
   const [customDuration, setCustomDuration] = useState<number>(defaultDuration);
-  const [showDurationInput, setShowDurationInput] = useState(false);
+  const [showDurationInput, setShowDurationInput] = useState<boolean>(false);
   
   // Calculate session duration in seconds
-  const sessionDuration = customDuration * 60;
+  const sessionDuration = customDuration * SESSION_DURATION.SECONDS_PER_MINUTE;
   
   // Use refs to avoid stale closures and rendering issues
   const onStateChangeRef = useRef(onStateChange);
@@ -85,7 +105,7 @@ const SessionControls = ({
           
           return newSeconds;
         });
-      }, 1000);
+      }, TIMER_INTERVAL_MS);
     }
 
     // Cleanup function to prevent memory leaks
@@ -129,7 +149,7 @@ const SessionControls = ({
       return;
     }
     
-    const minutes = Math.ceil(seconds / 60);
+    const minutes = Math.ceil(seconds / SESSION_DURATION.SECONDS_PER_MINUTE);
     
     try {
       await onSessionComplete(minutes);
@@ -149,19 +169,21 @@ const SessionControls = ({
     }
   };
 
-  const formatTime = (totalSeconds: number) => {
-    const mins = Math.floor(totalSeconds / 60);
-    const secs = totalSeconds % 60;
+  const formatTime = (totalSeconds: number): string => {
+    const mins = Math.floor(totalSeconds / SESSION_DURATION.SECONDS_PER_MINUTE);
+    const secs = totalSeconds % SESSION_DURATION.SECONDS_PER_MINUTE;
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
   const handleDurationChange = (newDuration: number) => {
-    if (newDuration > 0 && newDuration <= 240) { // Max 4 hours
+    if (newDuration >= SESSION_DURATION.MIN_MINUTES && newDuration <= SESSION_DURATION.MAX_MINUTES) {
       setCustomDuration(newDuration);
       setShowDurationInput(false);
       toast.success(`Session duration set to ${newDuration} minutes`);
     } else {
-      toast.error("Duration must be between 1 and 240 minutes");
+      toast.error(
+        `Duration must be between ${SESSION_DURATION.MIN_MINUTES} and ${SESSION_DURATION.MAX_MINUTES} minutes`
+      );
     }
   };
 
@@ -185,8 +207,8 @@ const SessionControls = ({
               }
             }}
             className="w-20 px-2 py-1 rounded border border-border bg-background text-sm"
-            min="1"
-            max="240"
+            min={SESSION_DURATION.MIN_MINUTES}
+            max={SESSION_DURATION.MAX_MINUTES}
           />
           <span className="text-sm text-muted-foreground">min</span>
         </div>
