@@ -225,6 +225,8 @@ export const useFocusSession = (parameters: {
       })
       .catch((e) => {
         console.error("Failed to fetch session data:", e);
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        
         // Set handles to zero hash on error
         setSessionCountHandle(ethers.ZeroHash);
         setTotalMinutesHandle(ethers.ZeroHash);
@@ -232,7 +234,16 @@ export const useFocusSession = (parameters: {
         setClearSessionCount({ handle: ethers.ZeroHash, clear: BigInt(0) });
         setClearTotalMinutes({ handle: ethers.ZeroHash, clear: BigInt(0) });
         setClearWeeklyGoal({ handle: ethers.ZeroHash, clear: BigInt(0) });
-        setMessage("Ready to start tracking. Log your first session!");
+        
+        // Provide user-friendly error message
+        if (errorMessage.includes("network")) {
+          setMessage("Network error. Please check your connection.");
+        } else if (errorMessage.includes("contract")) {
+          setMessage("Contract not found. Please check network.");
+        } else {
+          setMessage("Ready to start tracking. Log your first session!");
+        }
+        
         isRefreshingRef.current = false;
         setIsRefreshing(false);
       });
@@ -353,7 +364,19 @@ export const useFocusSession = (parameters: {
 
         setMessage("Decryption completed!");
       } catch (e) {
-        setMessage("Decryption failed: " + e);
+        console.error("Decryption error:", e);
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        
+        // Provide user-friendly error messages
+        if (errorMessage.includes("signature") || errorMessage.includes("sign")) {
+          setMessage("Decryption failed: Wallet signature rejected");
+        } else if (errorMessage.includes("permission") || errorMessage.includes("allow")) {
+          setMessage("Decryption failed: Missing decrypt permission");
+        } else if (errorMessage.includes("network")) {
+          setMessage("Decryption failed: Network error");
+        } else {
+          setMessage(`Decryption failed: ${errorMessage}`);
+        }
       } finally {
         isDecryptingRef.current = false;
         setIsDecrypting(false);
@@ -425,7 +448,19 @@ export const useFocusSession = (parameters: {
         
         refreshHandles();
       } catch (e) {
-        setMessage("Failed to log session: " + e);
+        console.error("Log session error:", e);
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        
+        // Provide user-friendly error messages
+        if (errorMessage.includes("user rejected") || errorMessage.includes("denied")) {
+          setMessage("Session logging cancelled by user");
+        } else if (errorMessage.includes("gas") || errorMessage.includes("fee")) {
+          setMessage("Transaction failed: Insufficient gas or funds");
+        } else if (errorMessage.includes("network")) {
+          setMessage("Network error: Please try again");
+        } else {
+          setMessage(`Failed to log session: ${errorMessage.substring(0, 100)}`);
+        }
         throw e;
       } finally {
         isLoggingRef.current = false;
@@ -478,7 +513,17 @@ export const useFocusSession = (parameters: {
         
         refreshHandles();
       } catch (e) {
-        setMessage("Failed to set goal: " + e);
+        console.error("Set goal error:", e);
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        
+        // Provide user-friendly error messages
+        if (errorMessage.includes("user rejected") || errorMessage.includes("denied")) {
+          setMessage("Goal setting cancelled by user");
+        } else if (errorMessage.includes("gas") || errorMessage.includes("fee")) {
+          setMessage("Transaction failed: Insufficient gas or funds");
+        } else {
+          setMessage(`Failed to set goal: ${errorMessage.substring(0, 100)}`);
+        }
         throw e;
       } finally {
         setIsSettingGoal(false);
