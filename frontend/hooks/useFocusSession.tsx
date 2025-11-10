@@ -62,22 +62,40 @@ function getFocusSessionByChainId(
 }
 
 /**
- * Safely call a contract method that returns euint32.
- * Returns ZeroHash if the value is uninitialized or empty.
+ * Safely call a contract method that returns euint32 encrypted value.
+ * 
+ * This function handles the case where an encrypted value has not been initialized yet.
+ * In FHEVM, uninitialized encrypted values return "0x" or empty bytes, which would
+ * normally cause decoding errors. This wrapper catches those cases and returns ZeroHash.
+ * 
+ * @param contract - The ethers.js contract instance
+ * @param methodName - Name of the contract method to call (e.g., "getSessionCount")
+ * @returns The encrypted handle as a string, or ZeroHash if uninitialized
+ * 
+ * @example
+ * const handle = await safeGetEuint32(contract, "getSessionCount");
+ * if (handle === ethers.ZeroHash) {
+ *   // Handle uninitialized case
+ * }
  */
 async function safeGetEuint32(
   contract: ethers.Contract,
   methodName: string
 ): Promise<string> {
   try {
-    const result = await contract[methodName]();
-    // If result is empty, undefined, or null, return ZeroHash
-    if (!result || result === "0x" || result === "") {
+    const encryptedHandle = await contract[methodName]();
+    
+    // Check if the encrypted handle is empty or uninitialized
+    // FHEVM returns "0x" or empty string for uninitialized encrypted values
+    if (!encryptedHandle || encryptedHandle === "0x" || encryptedHandle === "") {
       return ethers.ZeroHash;
     }
-    return result;
-  } catch {
-    // If decoding fails (e.g., uninitialized value returns "0x"), return ZeroHash
+    
+    return encryptedHandle;
+  } catch (error) {
+    // If the contract call fails (e.g., method doesn't exist, network error),
+    // treat it as an uninitialized value
+    console.warn(`Failed to call ${methodName}:`, error);
     return ethers.ZeroHash;
   }
 }
@@ -175,52 +193,85 @@ export const useFocusSession = (parameters: {
     return focusSession.address && ethersSigner && !isRefreshing;
   }, [focusSession.address, ethersSigner, isRefreshing]);
 
-  // Refresh handles from contract - must use signer because contract uses msg.sender
+  /**
+   * Refresh encrypted data handles from the FocusSession contract.
+   * 
+   * This function fetches the latest encrypted handles (session count, total minutes, 
+   * and weekly goal) from the blockchain. It must use a signer (not just a provider) 
+   * because the contract methods use msg.sender to return user-specific data.
+   * 
+   * The function is debounced using isRefreshingRef to prevent concurrent fetches.
+   * It safely handles uninitialized values and provides user feedback via setMessage.
+   * 
+   * @see safeGetEuint32 for how uninitialized values are handled
+   */
   const refreshHandles = useCallback(() => {
-    if (isRefreshingRef.current) return;
+    // Prevent concurrent refresh operations
+    if (isRefreshingRef.current) {
+      console.debug("Refresh already in progress, skipping");
+      return;
+    }
+    
+    // Validate required parameters before fetching
     if (!focusSessionRef.current?.chainId || !focusSessionRef.current?.address || !ethersSigner) {
+      // Clear handles if contract or signer not available
       setSessionCountHandle(undefined);
       setTotalMinutesHandle(undefined);
       setWeeklyGoalHandle(undefined);
       return;
     }
 
+    // Lock to prevent concurrent fetches
     isRefreshingRef.current = true;
     setIsRefreshing(true);
     setMessage("Fetching encrypted session data...");
 
-    const thisChainId = focusSessionRef.current.chainId;
-    const thisAddress = focusSessionRef.current.address;
+    // Capture current state to detect stale operations
+    const currentChainId = focusSessionRef.current.chainId;
+    const currentContractAddress = focusSessionRef.current.address;
     
-    // Must use ethersSigner because contract methods use msg.sender to get user data
-    const contract = new ethers.Contract(
-      thisAddress,
+    // Create contract instance with signer (required because methods use msg.sender)
+    const contractWithSigner = new ethers.Contract(
+      currentContractAddress,
       focusSessionRef.current.abi,
       ethersSigner
     );
 
-    // Use safe getters that handle uninitialized values
+    // Fetch all encrypted handles in parallel for efficiency
+    // Use safe getters that gracefully handle uninitialized values
     Promise.all([
-      safeGetEuint32(contract, "getSessionCount"),
-      safeGetEuint32(contract, "getTotalMinutes"),
-      safeGetEuint32(contract, "getWeeklyGoal"),
+      safeGetEuint32(contractWithSigner, "getSessionCount"),
+      safeGetEuint32(contractWithSigner, "getTotalMinutes"),
+      safeGetEuint32(contractWithSigner, "getWeeklyGoal"),
     ])
-      .then(([sessionCount, totalMinutes, weeklyGoal]) => {
-        if (sameChain.current(thisChainId) && thisAddress === focusSessionRef.current?.address) {
-          setSessionCountHandle(sessionCount);
-          setTotalMinutesHandle(totalMinutes);
-          setWeeklyGoalHandle(weeklyGoal);
+      .then(([sessionCountEncrypted, totalMinutesEncrypted, weeklyGoalEncrypted]) => {
+        // Check if context is still valid (user hasn't switched chains/contracts)
+        const isStillValid = sameChain.current(currentChainId) && 
+                            currentContractAddress === focusSessionRef.current?.address;
+        
+        if (isStillValid) {
+          // Update handles with fetched values
+          setSessionCountHandle(sessionCountEncrypted);
+          setTotalMinutesHandle(totalMinutesEncrypted);
+          setWeeklyGoalHandle(weeklyGoalEncrypted);
           
-          // If all values are zero (uninitialized), set clear values to zero
-          if (sessionCount === ethers.ZeroHash) {
-            setClearSessionCount({ handle: sessionCount, clear: BigInt(0) });
-            setClearTotalMinutes({ handle: totalMinutes, clear: BigInt(0) });
-            setClearWeeklyGoal({ handle: weeklyGoal, clear: BigInt(0) });
-            setMessage("No session data yet. Start a focus session!");
+          // Check if this is a new user (no data on-chain yet)
+          if (sessionCountEncrypted === ethers.ZeroHash) {
+            // Initialize clear values to zero for uninitialized account
+            setClearSessionCount({ handle: sessionCountEncrypted, clear: BigInt(0) });
+            setClearTotalMinutes({ handle: totalMinutesEncrypted, clear: BigInt(0) });
+            setClearWeeklyGoal({ handle: weeklyGoalEncrypted, clear: BigInt(0) });
+            setMessage("Welcome! Start your first focus session to begin tracking.");
           } else {
-            setMessage("Session data loaded. Click 'Decrypt' to view stats.");
+            // User has encrypted data on-chain
+            setMessage("Encrypted session data loaded. Click 'Decrypt' to view your stats.");
           }
+        } else {
+          // Context changed during fetch, ignore results
+          console.debug("Ignoring stale refresh results");
         }
+        
+        // Release refresh lock
         isRefreshingRef.current = false;
         setIsRefreshing(false);
       })
