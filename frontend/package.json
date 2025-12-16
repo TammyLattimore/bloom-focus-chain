@@ -7,8 +7,9 @@
   "scripts": {
     "clean": "rimraf .next",
     "dev:mock": "npm run ishhrunning && npm run clean && npm run genabi && next dev --turbopack --hostname 0.0.0.0",
-    "dev": "npm run clean && npm run genabi && next dev --turbopack --hostname 0.0.0.0",
+    "dev": "npm run clean && npm run genabi && next dev --hostname 0.0.0.0",
     "dev-webpack": "npm run clean && npm run genabi && next dev --hostname 0.0.0.0",
+    "dev-noclean": "npm run genabi && next dev --hostname 0.0.0.0",
     "genabi": "node ./scripts/genabi.mjs",
     "ishhrunning": "node ./scripts/is-hardhat-node-running.mjs",
     "build": "next build",

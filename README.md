@@ -21,7 +21,7 @@
 
 ### 🌐 Live Application
 
-**Try it now**: [https://bloom-focus-chain.vercel.app/](https://bloom-focus-chain.vercel.app/)
+**Try it now**: [https://bloom-focus-chain.vercel.app/](https://bloom-focus-chain-nine.vercel.app/)
 
 Experience the full application with:
 - ✅ Encrypted session tracking on Sepolia testnet
